@@ -13,13 +13,21 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+type UrlInfo struct {
+	Url  string `json:"url"`
+	Name string `json:"name"`
+}
 type settingsParcer struct {
-	Token string  `json:"token"`
-	Chats []int64 `json:"chats"`
-	Url   string  `json:"url"`
+	Token string    `json:"token"`
+	Chats []int64   `json:"chats"`
+	Urls  []UrlInfo `json:"urls"`
 }
 
-var fSettingsFile = flag.String("s", "settings.json",
+func (ui UrlInfo) String() string {
+	return fmt.Sprintf("%v (%v)", ui.Name, ui.Url)
+}
+
+var fSettingsFile = flag.String("s", "ping.settings.json",
 	"Settings file")
 
 func main() {
@@ -61,27 +69,30 @@ func main() {
 		}
 	}
 
-	go func() {
-		client := http.Client{
-			Timeout: 5 * time.Second,
-		}
-		for {
-			resp, err := client.Get(settings.Url)
-			if err != nil {
-				send(fmt.Sprintf("Call: %v\nError: %v", settings.Url, err))
-			} else {
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					send(fmt.Sprintf("Call: %v\nGet body error: %v", settings.Url, err))
-				}
-				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-					send(fmt.Sprintf("Call: %v\nStatus code: %v\nBody: %v",
-						settings.Url, resp.StatusCode, string(body)))
-				}
+	for i := range settings.Urls {
+		url := settings.Urls[i]
+		go func() {
+			client := http.Client{
+				Timeout: 5 * time.Second,
 			}
-			time.Sleep(time.Second * 60)
-		}
-	}()
+			for {
+				resp, err := client.Get(url.Url)
+				if err != nil {
+					send(fmt.Sprintf("Call: %v\nError: %v", url, err))
+				} else {
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						send(fmt.Sprintf("Call: %v\nGet body error: %v", url, err))
+					}
+					if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+						send(fmt.Sprintf("Call: %v\nStatus code: %v\nBody: %v",
+							url, resp.StatusCode, string(body)))
+					}
+				}
+				time.Sleep(time.Second * 60)
+			}
+		}()
+	}
 
 	for update := range updates {
 		if update.Message == nil {
